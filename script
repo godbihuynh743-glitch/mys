@@ -1,0 +1,493 @@
+--====================================================
+-- KD5 TARGET - FIXED
+-- Roblox Studio / game của bạn
+--====================================================
+
+local targetPage = page("Target")
+
+local selectedPlayer = nil
+local spectating = false
+local following = false
+
+local targetHighlight = nil
+local followConnection = nil
+local characterConnections = {}
+
+--====================================================
+-- HELPERS
+--====================================================
+
+local function getRoot(player)
+	local character = player and player.Character
+	return character and character:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHumanoid(player)
+	local character = player and player.Character
+	return character and character:FindFirstChildOfClass("Humanoid")
+end
+
+local function clearHighlight()
+	if targetHighlight then
+		targetHighlight:Destroy()
+		targetHighlight = nil
+	end
+end
+
+local function stopFollow()
+	following = false
+
+	if followConnection then
+		followConnection:Disconnect()
+		followConnection = nil
+	end
+
+	if autoTpButton then
+		autoTpButton.Text = "FOLLOW: OFF"
+		autoTpButton.BackgroundColor3 = GRAY
+	end
+end
+
+local function stopSpectate()
+	spectating = false
+
+	local humanoid = getHumanoid(LP)
+
+	if humanoid and workspace.CurrentCamera then
+		workspace.CurrentCamera.CameraSubject = humanoid
+	end
+
+	if spectateButton then
+		spectateButton.Text = "SPECTATE: OFF"
+		spectateButton.BackgroundColor3 = GRAY
+	end
+end
+
+local function clearTarget()
+	stopFollow()
+	stopSpectate()
+	clearHighlight()
+	selectedPlayer = nil
+end
+
+--====================================================
+-- HIGHLIGHT
+--====================================================
+
+local function updateHighlight()
+	clearHighlight()
+
+	if not selectedPlayer then
+		return
+	end
+
+	local character = selectedPlayer.Character
+
+	if not character then
+		return
+	end
+
+	targetHighlight = Instance.new("Highlight")
+	targetHighlight.Name = "KD5_TargetHighlight"
+
+	targetHighlight.FillColor = WHITE
+	targetHighlight.OutlineColor = WHITE
+
+	targetHighlight.FillTransparency = 0.85
+	targetHighlight.OutlineTransparency = 0
+
+	targetHighlight.DepthMode =
+		Enum.HighlightDepthMode.AlwaysOnTop
+
+	targetHighlight.Parent = character
+end
+
+--====================================================
+-- TITLE
+--====================================================
+
+local title = Instance.new("TextLabel")
+title.Name = "Title"
+title.Size = UDim2.new(1, -10, 0, 30)
+title.Position = UDim2.fromOffset(5, 5)
+
+title.BackgroundTransparency = 1
+
+title.Text = "TARGET PLAYER"
+title.TextColor3 = WHITE
+title.TextSize = 18
+title.Font = Enum.Font.GothamBold
+
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = targetPage
+
+--====================================================
+-- PLAYER LIST
+--====================================================
+
+local playerList = Instance.new("ScrollingFrame")
+playerList.Name = "PlayerList"
+
+playerList.Size = UDim2.new(1, -10, 0, 150)
+playerList.Position = UDim2.fromOffset(5, 40)
+
+playerList.BackgroundColor3 = DARK
+playerList.BorderSizePixel = 0
+
+playerList.ScrollBarThickness = 4
+playerList.CanvasSize = UDim2.fromOffset(0, 0)
+
+playerList.Parent = targetPage
+
+Instance.new("UICorner", playerList).CornerRadius =
+	UDim.new(0, 10)
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 5)
+listLayout.Parent = playerList
+
+--====================================================
+-- REFRESH PLAYER LIST
+--====================================================
+
+local refreshing = false
+
+local function refreshPlayers()
+
+	if refreshing then
+		return
+	end
+
+	refreshing = true
+
+	for _, child in ipairs(playerList:GetChildren()) do
+		if child:IsA("TextButton") then
+			child:Destroy()
+		end
+	end
+
+	for _, player in ipairs(Players:GetPlayers()) do
+
+		if player ~= LP then
+
+			local button = Instance.new("TextButton")
+
+			button.Size = UDim2.new(1, -10, 0, 35)
+
+			button.BackgroundColor3 =
+				(selectedPlayer == player)
+				and Color3.fromRGB(55, 55, 62)
+				or GRAY
+
+			button.Text =
+				player.DisplayName ..
+				"  @" ..
+				player.Name
+
+			button.TextColor3 = WHITE
+			button.TextSize = 12
+			button.Font = Enum.Font.GothamBold
+
+			button.AutoButtonColor = false
+			button.Parent = playerList
+
+			Instance.new("UICorner", button).CornerRadius =
+				UDim.new(0, 8)
+
+			button.MouseButton1Click:Connect(function()
+
+				if selectedPlayer ~= player then
+					stopFollow()
+					stopSpectate()
+				end
+
+				selectedPlayer = player
+
+				refreshPlayers()
+				updateHighlight()
+			end)
+		end
+	end
+
+	task.defer(function()
+
+		if playerList.Parent and listLayout.Parent then
+
+			playerList.CanvasSize = UDim2.fromOffset(
+				0,
+				listLayout.AbsoluteContentSize.Y + 10
+			)
+
+		end
+
+	end)
+
+	refreshing = false
+end
+
+--====================================================
+-- TELEPORT ME
+--====================================================
+
+local teleportButton = Instance.new("TextButton")
+
+teleportButton.Name = "TeleportButton"
+
+teleportButton.Size = UDim2.new(1, -10, 0, 38)
+teleportButton.Position = UDim2.fromOffset(5, 200)
+
+teleportButton.BackgroundColor3 = GRAY
+
+teleportButton.Text = "TELEPORT ME"
+teleportButton.TextColor3 = WHITE
+teleportButton.TextSize = 12
+teleportButton.Font = Enum.Font.GothamBold
+
+teleportButton.AutoButtonColor = false
+teleportButton.Parent = targetPage
+
+Instance.new("UICorner", teleportButton).CornerRadius =
+	UDim.new(0, 10)
+
+teleportButton.MouseButton1Click:Connect(function()
+
+	if not selectedPlayer then
+		return
+	end
+
+	local myRoot = getRoot(LP)
+	local targetRoot = getRoot(selectedPlayer)
+
+	if not myRoot or not targetRoot then
+		return
+	end
+
+	local distance =
+		(myRoot.Position - targetRoot.Position).Magnitude
+
+	local duration =
+		math.clamp(distance / 100, 0.15, 3)
+
+	local tween = TweenService:Create(
+		myRoot,
+
+		TweenInfo.new(
+			duration,
+			Enum.EasingStyle.Linear
+		),
+
+		{
+			CFrame =
+				targetRoot.CFrame *
+				CFrame.new(0, 0, 4)
+		}
+	)
+
+	tween:Play()
+end)
+
+--====================================================
+-- SPECTATE
+--====================================================
+
+local spectateButton = Instance.new("TextButton")
+
+spectateButton.Name = "SpectateButton"
+
+spectateButton.Size = UDim2.new(0.5, -8, 0, 38)
+spectateButton.Position = UDim2.fromOffset(5, 245)
+
+spectateButton.BackgroundColor3 = GRAY
+
+spectateButton.Text = "SPECTATE: OFF"
+spectateButton.TextColor3 = WHITE
+spectateButton.TextSize = 11
+spectateButton.Font = Enum.Font.GothamBold
+
+spectateButton.AutoButtonColor = false
+spectateButton.Parent = targetPage
+
+Instance.new("UICorner", spectateButton).CornerRadius =
+	UDim.new(0, 10)
+
+spectateButton.MouseButton1Click:Connect(function()
+
+	if not selectedPlayer then
+		return
+	end
+
+	if spectating then
+		stopSpectate()
+		return
+	end
+
+	local humanoid = getHumanoid(selectedPlayer)
+
+	if not humanoid then
+		return
+	end
+
+	spectating = true
+
+	workspace.CurrentCamera.CameraSubject =
+		humanoid
+
+	spectateButton.Text =
+		"SPECTATE: ON"
+
+	spectateButton.BackgroundColor3 =
+		Color3.fromRGB(55, 55, 62)
+end)
+
+--====================================================
+-- FOLLOW
+--====================================================
+
+local autoTpButton = Instance.new("TextButton")
+
+autoTpButton.Name = "FollowButton"
+
+autoTpButton.Size = UDim2.new(0.5, -7, 0, 38)
+autoTpButton.Position = UDim2.new(0.5, 2, 0, 245)
+
+autoTpButton.BackgroundColor3 = GRAY
+
+autoTpButton.Text = "FOLLOW: OFF"
+autoTpButton.TextColor3 = WHITE
+autoTpButton.TextSize = 11
+autoTpButton.Font = Enum.Font.GothamBold
+
+autoTpButton.AutoButtonColor = false
+autoTpButton.Parent = targetPage
+
+Instance.new("UICorner", autoTpButton).CornerRadius =
+	UDim.new(0, 10)
+
+autoTpButton.MouseButton1Click:Connect(function()
+
+	if not selectedPlayer then
+		return
+	end
+
+	if following then
+		stopFollow()
+		return
+	end
+
+	following = true
+
+	autoTpButton.Text =
+		"FOLLOW: ON"
+
+	autoTpButton.BackgroundColor3 =
+		Color3.fromRGB(55, 55, 62)
+
+	followConnection =
+		RunService.Heartbeat:Connect(function()
+
+			if not following or not selectedPlayer then
+				return
+			end
+
+			local myRoot = getRoot(LP)
+			local targetRoot = getRoot(selectedPlayer)
+
+			if not myRoot or not targetRoot then
+				return
+			end
+
+			local position =
+				targetRoot.Position -
+				targetRoot.CFrame.LookVector * 5
+
+			myRoot.CFrame =
+				CFrame.lookAt(
+					position,
+					targetRoot.Position
+				)
+		end)
+end)
+
+--====================================================
+-- CHARACTER EVENTS
+--====================================================
+
+local function watchPlayer(player)
+
+	if player == LP then
+		return
+	end
+
+	if characterConnections[player] then
+		characterConnections[player]:Disconnect()
+	end
+
+	characterConnections[player] =
+		player.CharacterAdded:Connect(function()
+
+			task.wait(0.25)
+
+			if player == selectedPlayer then
+
+				updateHighlight()
+
+				if spectating then
+					stopSpectate()
+				end
+
+			end
+		end)
+end
+
+--====================================================
+-- PLAYER EVENTS
+--====================================================
+
+for _, player in ipairs(Players:GetPlayers()) do
+	watchPlayer(player)
+end
+
+Players.PlayerAdded:Connect(function(player)
+
+	watchPlayer(player)
+
+	task.defer(refreshPlayers)
+
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+
+	if characterConnections[player] then
+		characterConnections[player]:Disconnect()
+		characterConnections[player] = nil
+	end
+
+	if player == selectedPlayer then
+		clearTarget()
+	end
+
+	task.defer(refreshPlayers)
+end)
+
+--====================================================
+-- LOCAL PLAYER RESPAWN
+--====================================================
+
+LP.CharacterAdded:Connect(function()
+
+	task.wait(0.25)
+
+	if spectating then
+		stopSpectate()
+	end
+
+	if selectedPlayer then
+		updateHighlight()
+	end
+end)
+
+--====================================================
+-- INIT
+--====================================================
+
+refreshPlayers()
