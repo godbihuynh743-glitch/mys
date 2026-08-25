@@ -1,6 +1,6 @@
 --====================================================
--- KD5 TARGET - STANDALONE GUI WITH ADVANCED FEATURES
--- Thêm: ESP | FLY | CAM LOCK | FLOATING TOGGLE BUTTON
+-- KD5 BI DA ĐEN - STANDALONE GUI WITH ADVANCED FEATURES
+-- Thêm: ESP | FLY | CAM LOCK | AIMBOT | FIX LAG | FLOATING TOGGLE
 --====================================================
 
 local Players = game:GetService("Players")
@@ -21,13 +21,13 @@ local RED_ACCENT = Color3.fromRGB(220, 60, 60)
 local GREEN_ACCENT = Color3.fromRGB(50, 200, 100)
 
 -- Tự động xóa GUI cũ nếu đã chạy trước đó
-if CoreGui:FindFirstChild("KD5_Target_GUI") then
-	CoreGui["KD5_Target_GUI"]:Destroy()
+if CoreGui:FindFirstChild("KD5_BiDaDen_GUI") then
+	CoreGui["KD5_BiDaDen_GUI"]:Destroy()
 end
 
 -- Tạo Giao diện chính (ScreenGui)
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "KD5_Target_GUI"
+screenGui.Name = "KD5_BiDaDen_GUI"
 screenGui.ResetOnSpawn = false
 
 pcall(function()
@@ -40,7 +40,7 @@ end
 -- Khung Menu chính
 local targetPage = Instance.new("Frame")
 targetPage.Name = "MainFrame"
-targetPage.Size = UDim2.fromOffset(250, 305)
+targetPage.Size = UDim2.fromOffset(250, 290)
 targetPage.Position = UDim2.new(0.5, -125, 0.3, -150)
 targetPage.BackgroundColor3 = BG_DARK
 targetPage.BorderSizePixel = 0
@@ -93,11 +93,14 @@ local following = false
 local flyEnabled = false
 local camLockEnabled = false
 local espEnabled = false
+local aimbotEnabled = false
+local fixLagApplied = false
 
 local targetHighlight = nil
 local followConnection = nil
 local flyConnection = nil
 local camLockConnection = nil
+local aimbotConnection = nil
 local characterConnections = {}
 local espObjects = {}
 
@@ -106,6 +109,8 @@ local spectateButton = nil
 local flyButton = nil
 local camLockButton = nil
 local espButton = nil
+local aimbotButton = nil
+local fixLagButton = nil
 
 local flySpeed = 50
 
@@ -166,6 +171,18 @@ local function stopCamLock()
 	end
 end
 
+local function stopAimbot()
+	aimbotEnabled = false
+	if aimbotConnection then
+		aimbotConnection:Disconnect()
+		aimbotConnection = nil
+	end
+	if aimbotButton then
+		aimbotButton.Text = "AIMBOT: OFF"
+		aimbotButton.BackgroundColor3 = GRAY
+	end
+end
+
 local function stopFly()
 	flyEnabled = false
 	if flyConnection then
@@ -194,6 +211,7 @@ local function clearTarget()
 	stopFollow()
 	stopSpectate()
 	stopCamLock()
+	stopAimbot()
 	clearHighlight()
 	selectedPlayer = nil
 end
@@ -218,7 +236,6 @@ local function updateHighlight()
 end
 
 local function updateESP()
-	-- Clear Old ESP
 	for plr, hl in pairs(espObjects) do
 		if hl then hl:Destroy() end
 	end
@@ -248,10 +265,10 @@ end
 
 local title = Instance.new("TextLabel")
 title.Name = "Title"
-title.Size = UDim2.new(1, -10, 0, 30)
-title.Position = UDim2.fromOffset(10, 3)
+title.Size = UDim2.new(1, -10, 0, 24)
+title.Position = UDim2.fromOffset(10, 5)
 title.BackgroundTransparency = 1
-title.Text = "KD5 TARGET PLAYER"
+title.Text = "KD5 BI DA ĐEN"
 title.TextColor3 = WHITE
 title.TextSize = 13
 title.Font = Enum.Font.GothamBold
@@ -264,8 +281,8 @@ title.Parent = targetPage
 
 local playerList = Instance.new("ScrollingFrame")
 playerList.Name = "PlayerList"
-playerList.Size = UDim2.new(1, -20, 0, 120)
-playerList.Position = UDim2.fromOffset(10, 33)
+playerList.Size = UDim2.new(1, -20, 0, 100)
+playerList.Position = UDim2.fromOffset(10, 32)
 playerList.BackgroundColor3 = DARK
 playerList.BorderSizePixel = 0
 playerList.ScrollBarThickness = 4
@@ -278,7 +295,6 @@ local listLayout = Instance.new("UIListLayout")
 listLayout.Padding = UDim.new(0, 4)
 listLayout.Parent = playerList
 
--- REFRESH PLAYER LIST
 local refreshing = false
 
 local function refreshPlayers()
@@ -330,13 +346,13 @@ local function refreshPlayers()
 end
 
 --====================================================
--- BUTTON 1: TELEPORT ME
+-- ROW 1: TELEPORT ME
 --====================================================
 
 local teleportButton = Instance.new("TextButton")
 teleportButton.Name = "TeleportButton"
-teleportButton.Size = UDim2.new(1, -20, 0, 26)
-teleportButton.Position = UDim2.fromOffset(10, 160)
+teleportButton.Size = UDim2.new(1, -20, 0, 24)
+teleportButton.Position = UDim2.fromOffset(10, 136)
 teleportButton.BackgroundColor3 = GRAY
 teleportButton.Text = "TELEPORT ME"
 teleportButton.TextColor3 = WHITE
@@ -373,8 +389,8 @@ end)
 
 spectateButton = Instance.new("TextButton")
 spectateButton.Name = "SpectateButton"
-spectateButton.Size = UDim2.new(0.5, -13, 0, 26)
-spectateButton.Position = UDim2.fromOffset(10, 191)
+spectateButton.Size = UDim2.new(0.5, -13, 0, 24)
+spectateButton.Position = UDim2.fromOffset(10, 164)
 spectateButton.BackgroundColor3 = GRAY
 spectateButton.Text = "SPECTATE: OFF"
 spectateButton.TextColor3 = WHITE
@@ -404,8 +420,8 @@ end)
 
 autoTpButton = Instance.new("TextButton")
 autoTpButton.Name = "FollowButton"
-autoTpButton.Size = UDim2.new(0.5, -13, 0, 26)
-autoTpButton.Position = UDim2.new(0.5, 3, 0, 191)
+autoTpButton.Size = UDim2.new(0.5, -13, 0, 24)
+autoTpButton.Position = UDim2.new(0.5, 3, 0, 164)
 autoTpButton.BackgroundColor3 = GRAY
 autoTpButton.Text = "FOLLOW: OFF"
 autoTpButton.TextColor3 = WHITE
@@ -447,8 +463,8 @@ end)
 
 camLockButton = Instance.new("TextButton")
 camLockButton.Name = "CamLockButton"
-camLockButton.Size = UDim2.new(0.5, -13, 0, 26)
-camLockButton.Position = UDim2.fromOffset(10, 222)
+camLockButton.Size = UDim2.new(0.5, -13, 0, 24)
+camLockButton.Position = UDim2.fromOffset(10, 192)
 camLockButton.BackgroundColor3 = GRAY
 camLockButton.Text = "CAM LOCK: OFF"
 camLockButton.TextColor3 = WHITE
@@ -486,8 +502,8 @@ end)
 
 flyButton = Instance.new("TextButton")
 flyButton.Name = "FlyButton"
-flyButton.Size = UDim2.new(0.5, -13, 0, 26)
-flyButton.Position = UDim2.new(0.5, 3, 0, 222)
+flyButton.Size = UDim2.new(0.5, -13, 0, 24)
+flyButton.Position = UDim2.new(0.5, 3, 0, 192)
 flyButton.BackgroundColor3 = GRAY
 flyButton.Text = "FLY: OFF"
 flyButton.TextColor3 = WHITE
@@ -554,8 +570,8 @@ end)
 
 espButton = Instance.new("TextButton")
 espButton.Name = "EspButton"
-espButton.Size = UDim2.new(1, -20, 0, 26)
-espButton.Position = UDim2.fromOffset(10, 253)
+espButton.Size = UDim2.new(1, -20, 0, 24)
+espButton.Position = UDim2.fromOffset(10, 220)
 espButton.BackgroundColor3 = GRAY
 espButton.Text = "ESP PLAYER: OFF"
 espButton.TextColor3 = WHITE
@@ -576,6 +592,112 @@ espButton.MouseButton1Click:Connect(function()
 		espButton.BackgroundColor3 = GRAY
 	end
 	updateESP()
+end)
+
+--====================================================
+-- ROW 5: AIMBOT & FIX LAG
+--====================================================
+
+aimbotButton = Instance.new("TextButton")
+aimbotButton.Name = "AimbotButton"
+aimbotButton.Size = UDim2.new(0.5, -13, 0, 24)
+aimbotButton.Position = UDim2.fromOffset(10, 248)
+aimbotButton.BackgroundColor3 = GRAY
+aimbotButton.Text = "AIMBOT: OFF"
+aimbotButton.TextColor3 = WHITE
+aimbotButton.TextSize = 10
+aimbotButton.Font = Enum.Font.GothamBold
+aimbotButton.AutoButtonColor = false
+aimbotButton.Parent = targetPage
+
+Instance.new("UICorner", aimbotButton).CornerRadius = UDim.new(0, 6)
+
+aimbotButton.MouseButton1Click:Connect(function()
+	if aimbotEnabled then
+		stopAimbot()
+		return
+	end
+
+	aimbotEnabled = true
+	aimbotButton.Text = "AIMBOT: ON"
+	aimbotButton.BackgroundColor3 = ACTIVE_COLOR
+
+	aimbotConnection = RunService.RenderStepped:Connect(function()
+		if not aimbotEnabled then
+			stopAimbot()
+			return
+		end
+
+		local targetPart = nil
+		if selectedPlayer and selectedPlayer.Character then
+			targetPart = selectedPlayer.Character:FindFirstChild("Head") or selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+		else
+			-- Tự động bắt mục tiêu gần nhất nếu chưa chọn ai
+			local closestDist = math.huge
+			local myRoot = getRoot(LP)
+			if myRoot then
+				for _, p in ipairs(Players:GetPlayers()) do
+					if p ~= LP and p.Character then
+						local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+						if hrp then
+							local dist = (hrp.Position - myRoot.Position).Magnitude
+							if dist < closestDist then
+								closestDist = dist
+								targetPart = p.Character:FindFirstChild("Head") or hrp
+							end
+						end
+					end
+				end
+			end
+		end
+
+		if targetPart and workspace.CurrentCamera then
+			workspace.CurrentCamera.CFrame = CFrame.lookAt(workspace.CurrentCamera.CFrame.Position, targetPart.Position)
+		end
+	end)
+end)
+
+fixLagButton = Instance.new("TextButton")
+fixLagButton.Name = "FixLagButton"
+fixLagButton.Size = UDim2.new(0.5, -13, 0, 24)
+fixLagButton.Position = UDim2.new(0.5, 3, 0, 248)
+fixLagButton.BackgroundColor3 = GRAY
+fixLagButton.Text = "FIX LAG: OFF"
+fixLagButton.TextColor3 = WHITE
+fixLagButton.TextSize = 10
+fixLagButton.Font = Enum.Font.GothamBold
+fixLagButton.AutoButtonColor = false
+fixLagButton.Parent = targetPage
+
+Instance.new("UICorner", fixLagButton).CornerRadius = UDim.new(0, 6)
+
+fixLagButton.MouseButton1Click:Connect(function()
+	fixLagApplied = not fixLagApplied
+	if fixLagApplied then
+		fixLagButton.Text = "FIX LAG: ON"
+		fixLagButton.BackgroundColor3 = ACTIVE_COLOR
+		
+		-- Tối ưu hóa đồ họa giảm lag
+		pcall(function()
+			settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+		end)
+		pcall(function()
+			game:GetService("Lighting").GlobalShadows = false
+			game:GetService("Lighting").FogEnd = 9e9
+		end)
+		
+		for _, v in ipairs(workspace:GetDescendants()) do
+			if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
+				v.Enabled = false
+			elseif v:IsA("BasePart") then
+				v.Material = Enum.Material.SmoothPlastic
+				v.CastShadow = false
+			end
+		end
+	else
+		fixLagButton.Text = "FIX LAG: OFF"
+		fixLagButton.BackgroundColor3 = GRAY
+	end
 end)
 
 --====================================================
