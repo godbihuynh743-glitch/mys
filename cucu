@@ -1,11 +1,7 @@
--- Load Orion UI Library
-local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
-local Window = OrionLib:MakeWindow({
-    Name = "KD5 Client Hub [RED EDITION]", 
-    HidePremium = false, 
-    SaveConfig = false, 
-    IntroText = "KD5 Red Menu Loaded!"
-})
+-- [[ KD5 CLIENT HUB - QUANTUM EDITION ]] --
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/InterfaceManager.lua"))()
 
 -- Services
 local Players = game:GetService("Players")
@@ -13,16 +9,212 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
 
--- Global Variables
+-- Window Setup
+local Window = Fluent:CreateWindow({
+    Title = "KD5 Client Hub",
+    SubTitle = "[QUANTUM EDITION]",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Darker",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+-- Tabs
+local Tabs = {
+    Aimbot = Window:AddTab({ Title = "Aimbot", Icon = "crosshair" }),
+    Movement = Window:AddTab({ Title = "Movement", Icon = "zap" }),
+    Utility = Window:AddTab({ Title = "Player / Utility", Icon = "user" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+--------------------------------------------------------------------
+-- AIMBOT SYSTEM
+--------------------------------------------------------------------
+local AimSettings = {
+    Enabled = false,
+    Keybind = Enum.UserInputType.MouseButton2,
+    TargetPart = "Head",
+    Smoothness = 0.25,
+    TeamCheck = true,
+    WallCheck = false,
+    AliveCheck = true,
+    
+    FOVVisible = true,
+    FOVRadius = 120,
+    FOVColor = Color3.fromRGB(255, 50, 50),
+    FOVRainbow = false
+}
+
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1.5
+FOVCircle.NumSides = 60
+FOVCircle.Filled = false
+FOVCircle.Transparency = 1
+FOVCircle.Visible = false
+
+local IsAiming = false
+
+-- Keybind Listener
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == AimSettings.Keybind or input.KeyCode == AimSettings.Keybind then
+        IsAiming = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == AimSettings.Keybind or input.KeyCode == AimSettings.Keybind then
+        IsAiming = false
+    end
+end)
+
+-- Check Wall Visibility
+local function IsVisible(part)
+    if not AimSettings.WallCheck then return true end
+    local origin = Camera.CFrame.Position
+    local direction = (part.Position - origin)
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    
+    local result = workspace:Raycast(origin, direction, raycastParams)
+    return result == nil or result.Instance:IsDescendantOf(part.Parent)
+end
+
+-- Get Closest Target
+local function GetClosestTarget()
+    local mousePos = UserInputService:GetMouseLocation()
+    local closestPlayer = nil
+    local shortestDist = AimSettings.FOVRadius
+
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer then
+            if AimSettings.TeamCheck and v.Team == LocalPlayer.Team then continue end
+            
+            local char = v.Character
+            if char and char:FindFirstChild(AimSettings.TargetPart) and char:FindFirstChild("Humanoid") then
+                if AimSettings.AliveCheck and char.Humanoid.Health <= 0 then continue end
+                
+                local targetPart = char[AimSettings.TargetPart]
+                local pos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                
+                if onScreen then
+                    local dist = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
+                    if dist < shortestDist and IsVisible(targetPart) then
+                        shortestDist = dist
+                        closestPlayer = v
+                    end
+                end
+            end
+        end
+    end
+    return closestPlayer
+end
+
+-- Render Loop
+RunService.RenderStepped:Connect(function()
+    -- FOV Render
+    local mousePos = UserInputService:GetMouseLocation()
+    FOVCircle.Position = mousePos
+    FOVCircle.Radius = AimSettings.FOVRadius
+    FOVCircle.Visible = AimSettings.FOVVisible and AimSettings.Enabled
+    
+    if AimSettings.FOVRainbow then
+        FOVCircle.Color = Color3.fromHSV(tick() % 3 / 3, 1, 1)
+    else
+        FOVCircle.Color = AimSettings.FOVColor
+    end
+
+    -- Aimbot Lock
+    if AimSettings.Enabled and IsAiming then
+        local target = GetClosestTarget()
+        if target and target.Character and target.Character:FindFirstChild(AimSettings.TargetPart) then
+            local targetPos = target.Character[AimSettings.TargetPart].Position
+            local currentCFrame = Camera.CFrame
+            local targetCFrame = CFrame.new(currentCFrame.Position, targetPos)
+            Camera.CFrame = currentCFrame:Lerp(targetCFrame, AimSettings.Smoothness)
+        end
+    end
+end)
+
+-- AIMBOT TAB UI
+Tabs.Aimbot:AddToggle("AimbotToggle", {
+    Title = "Bật Aimbot",
+    Default = false,
+    Callback = function(v) AimSettings.Enabled = v end
+})
+
+Tabs.Aimbot:AddDropdown("AimPart", {
+    Title = "Bộ Phận Ngắm",
+    Values = {"Head", "HumanoidRootPart", "Torso"},
+    Default = "Head",
+    Callback = function(v) AimSettings.TargetPart = v end
+})
+
+Tabs.Aimbot:AddSlider("Smoothness", {
+    Title = "Độ Mượt (Smoothness)",
+    Min = 0.05, Max = 1, Default = 0.25, Decimals = 2,
+    Callback = function(v) AimSettings.Smoothness = v end
+})
+
+Tabs.Aimbot:AddKeybind("AimKeybind", {
+    Title = "Phím Giữ Aimbot",
+    Mode = "Hold",
+    Default = "MouseButton2",
+    Callback = function(Value)
+        AimSettings.Keybind = Value
+    end
+})
+
+Tabs.Aimbot:AddToggle("TeamCheck", {
+    Title = "Bỏ Qua Đồng Đội (Team Check)",
+    Default = true,
+    Callback = function(v) AimSettings.TeamCheck = v end
+})
+
+Tabs.Aimbot:AddToggle("WallCheck", {
+    Title = "Kiểm Tra Tường (Wall Check)",
+    Default = false,
+    Callback = function(v) AimSettings.WallCheck = v end
+})
+
+local FOVSection = Tabs.Aimbot:AddSection("Vòng Tròn FOV")
+
+FOVSection:AddToggle("FOVToggle", {
+    Title = "Hiện Vòng FOV",
+    Default = true,
+    Callback = function(v) AimSettings.FOVVisible = v end
+})
+
+FOVSection:AddSlider("FOVRadius", {
+    Title = "Kích Thước FOV",
+    Min = 30, Max = 500, Default = 120, Decimals = 0,
+    Callback = function(v) AimSettings.FOVRadius = v end
+})
+
+FOVSection:AddColorpicker("FOVColor", {
+    Title = "Màu FOV",
+    Default = Color3.fromRGB(255, 50, 50),
+    Callback = function(v) AimSettings.FOVColor = v end
+})
+
+FOVSection:AddToggle("FOVRainbow", {
+    Title = "Màu Rainbow (Cầu Cồng)",
+    Default = false,
+    Callback = function(v) AimSettings.FOVRainbow = v end
+})
+
+--------------------------------------------------------------------
+-- MOVEMENT SYSTEM
+--------------------------------------------------------------------
 local SpeedVal = 16
 local JumpVal = 50
-local AimbotEnabled = false
 local Flying = false
 local FlySpeed = 50
-local TargetPlayerName = ""
 
--- Loop duy trì Speed/Jump
 task.spawn(function()
     while task.wait(0.1) do
         pcall(function()
@@ -36,61 +228,21 @@ task.spawn(function()
     end
 end)
 
--- Super Aimbot Logic
-local function GetClosestPlayer()
-    local target = nil
-    local maxDist = math.huge
-    for _, v in pairs(Players:GetPlayers()) do
-        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Head") and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
-            local pos, onScreen = Camera:WorldToViewportPoint(v.Character.Head.Position)
-            if onScreen then
-                local dist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)).Magnitude
-                if dist < maxDist then
-                    maxDist = dist
-                    target = v
-                end
-            end
-        end
-    end
-    return target
-end
-
-RunService.RenderStepped:Connect(function()
-    if AimbotEnabled then
-        local target = GetClosestPlayer()
-        if target and target.Character and target.Character:FindFirstChild("Head") then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
-        end
-    end
-end)
-
--- TAB 1: MOVEMENT & AIMBOT (Tông màu Đỏ)
-local MainTab = Window:MakeTab({Name = "Main / Movement", Icon = "rbxassetid://4483345998"})
-
-MainTab:AddSlider({
-    Name = "Speed Boost", Min = 16, Max = 500, Default = 16, 
-    Color = Color3.fromRGB(255, 0, 0), -- Đỏ tươi
-    Increment = 1, ValueName = "Speed",
+Tabs.Movement:AddSlider("SpeedSlider", {
+    Title = "Tốc Độ Di Chuyển (Speed)",
+    Min = 16, Max = 300, Default = 16, Decimals = 0,
     Callback = function(v) SpeedVal = v end
 })
 
-MainTab:AddSlider({
-    Name = "Jump Boost", Min = 50, Max = 500, Default = 50, 
-    Color = Color3.fromRGB(180, 0, 0), -- Đỏ sẫm
-    Increment = 1, ValueName = "Jump",
+Tabs.Movement:AddSlider("JumpSlider", {
+    Title = "Độ Cao Nhảy (Jump)",
+    Min = 50, Max = 300, Default = 50, Decimals = 0,
     Callback = function(v) JumpVal = v end
 })
 
-MainTab:AddToggle({
-    Name = "Super Aimbot", Default = false,
-    Callback = function(v) AimbotEnabled = v end
-})
-
--- TAB 2: UTILITIES
-local UtilTab = Window:MakeTab({Name = "Admin / Utility", Icon = "rbxassetid://4483345998"})
-
-UtilTab:AddToggle({
-    Name = "Fly (Bay theo Camera)", Default = false,
+Tabs.Movement:AddToggle("FlyToggle", {
+    Title = "Bay Theo Camera (Fly)",
+    Default = false,
     Callback = function(v)
         Flying = v
         local char = LocalPlayer.Character
@@ -114,30 +266,42 @@ UtilTab:AddToggle({
     end
 })
 
-local playerList = {}
-local function updatePlayerList()
-    playerList = {}
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then table.insert(playerList, p.Name) end
-    end
-end
-updatePlayerList()
+Tabs.Movement:AddSlider("FlySpeedSlider", {
+    Title = "Tốc Độ Bay",
+    Min = 20, Max = 200, Default = 50, Decimals = 0,
+    Callback = function(v) FlySpeed = v end
+})
 
-local PlayerDropdown = UtilTab:AddDropdown({
-    Name = "Chọn Người Chơi", Options = playerList,
+--------------------------------------------------------------------
+-- UTILITY & PLAYER SYSTEM
+--------------------------------------------------------------------
+local TargetPlayerName = ""
+local playerList = {}
+
+local function GetPlayerNames()
+    local names = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then table.insert(names, p.Name) end
+    end
+    return names
+end
+
+local PlayerDropdown = Tabs.Utility:AddDropdown("PlayerSelect", {
+    Title = "Chọn Người Chơi",
+    Values = GetPlayerNames(),
+    Default = nil,
     Callback = function(v) TargetPlayerName = v end
 })
 
-UtilTab:AddButton({
-    Name = "Làm mới danh sách Player",
+Tabs.Utility:AddButton({
+    Title = "Làm Mới Danh Sách Player",
     Callback = function()
-        updatePlayerList()
-        PlayerDropdown:Refresh(playerList, true)
+        PlayerDropdown:SetValues(GetPlayerNames())
     end
 })
 
-UtilTab:AddButton({
-    Name = "Teleport tới Player",
+Tabs.Utility:AddButton({
+    Title = "Dịch Chuyển Tới Player",
     Callback = function()
         local target = Players:FindFirstChild(TargetPlayerName)
         if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
@@ -146,8 +310,8 @@ UtilTab:AddButton({
     end
 })
 
-UtilTab:AddButton({
-    Name = "Spectate Player",
+Tabs.Utility:AddButton({
+    Title = "Xem Góc Nhìn Player (Spectate)",
     Callback = function()
         local target = Players:FindFirstChild(TargetPlayerName)
         if target and target.Character and target.Character:FindFirstChild("Humanoid") then
@@ -156,8 +320,8 @@ UtilTab:AddButton({
     end
 })
 
-UtilTab:AddButton({
-    Name = "Tắt Spectate",
+Tabs.Utility:AddButton({
+    Title = "Hủy Spectate",
     Callback = function()
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
             Camera.CameraSubject = LocalPlayer.Character.Humanoid
@@ -165,8 +329,8 @@ UtilTab:AddButton({
     end
 })
 
-UtilTab:AddButton({
-    Name = "Fix Lag (Tối ưu FPS)",
+Tabs.Utility:AddButton({
+    Title = "Tối Ưu FPS / Fix Lag",
     Callback = function()
         Lighting.GlobalShadows = false
         Lighting.FogEnd = 9e9
@@ -177,7 +341,20 @@ UtilTab:AddButton({
                 v:Destroy()
             end
         end
+        Fluent:Notify({ Title = "KD5 Fix Lag", Content = "Đã tối ưu hóa đồ họa game!", Duration = 3 })
     end
 })
 
-OrionLib:Init()
+-- Managers Setup
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:BuildConfigSection(Tabs.Settings)
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+
+Window:SelectTab(1)
+Fluent:Notify({
+    Title = "KD5 Client Hub",
+    Content = "Đã tải thành công giao diện Quantum Edition!",
+    Duration = 5
+})
