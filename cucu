@@ -1,765 +1,183 @@
---====================================================
--- KD5 BI DA ĐEN - STANDALONE GUI WITH ADVANCED FEATURES
--- Thêm: ESP | FLY | CAM LOCK | AIMBOT | FIX LAG | FLOATING TOGGLE
---====================================================
+-- Load Orion UI Library
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
+local Window = OrionLib:MakeWindow({
+    Name = "KD5 Client Hub [RED EDITION]", 
+    HidePremium = false, 
+    SaveConfig = false, 
+    IntroText = "KD5 Red Menu Loaded!"
+})
 
+-- Services
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 local RunService = game:GetService("RunService")
-local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
 
-local LP = Players.LocalPlayer
+-- Global Variables
+local SpeedVal = 16
+local JumpVal = 50
+local AimbotEnabled = false
+local Flying = false
+local FlySpeed = 50
+local TargetPlayerName = ""
 
--- Khai báo màu sắc
-local WHITE = Color3.fromRGB(255, 255, 255)
-local GRAY = Color3.fromRGB(40, 40, 45)
-local DARK = Color3.fromRGB(25, 25, 30)
-local BG_DARK = Color3.fromRGB(18, 18, 22)
-local ACTIVE_COLOR = Color3.fromRGB(55, 55, 62)
-local RED_ACCENT = Color3.fromRGB(220, 60, 60)
-local GREEN_ACCENT = Color3.fromRGB(50, 200, 100)
-
--- Tự động xóa GUI cũ nếu đã chạy trước đó
-if CoreGui:FindFirstChild("KD5_BiDaDen_GUI") then
-	CoreGui["KD5_BiDaDen_GUI"]:Destroy()
-end
-
--- Tạo Giao diện chính (ScreenGui)
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "KD5_BiDaDen_GUI"
-screenGui.ResetOnSpawn = false
-
-pcall(function()
-	screenGui.Parent = CoreGui
-end)
-if not screenGui.Parent then
-	screenGui.Parent = LP:WaitForChild("PlayerGui")
-end
-
--- Khung Menu chính
-local targetPage = Instance.new("Frame")
-targetPage.Name = "MainFrame"
-targetPage.Size = UDim2.fromOffset(250, 290)
-targetPage.Position = UDim2.new(0.5, -125, 0.3, -150)
-targetPage.BackgroundColor3 = BG_DARK
-targetPage.BorderSizePixel = 0
-targetPage.Active = true
-targetPage.Draggable = true
-targetPage.Parent = screenGui
-
-Instance.new("UICorner", targetPage).CornerRadius = UDim.new(0, 10)
-
--- Border Stroke
-local mainStroke = Instance.new("UIStroke", targetPage)
-mainStroke.Color = Color3.fromRGB(60, 60, 70)
-mainStroke.Thickness = 1
-
---====================================================
--- FLOATING TOGGLE BUTTON (NÚT TRÒN MỞ/TẮT MENU)
---====================================================
-
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Name = "ToggleMenuButton"
-toggleBtn.Size = UDim2.fromOffset(45, 45)
-toggleBtn.Position = UDim2.new(0, 20, 0.4, 0)
-toggleBtn.BackgroundColor3 = BG_DARK
-toggleBtn.Text = "KD5"
-toggleBtn.TextColor3 = WHITE
-toggleBtn.TextSize = 13
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.Active = true
-toggleBtn.Draggable = true
-toggleBtn.AutoButtonColor = false
-toggleBtn.Parent = screenGui
-
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
-
-local toggleStroke = Instance.new("UIStroke", toggleBtn)
-toggleStroke.Color = WHITE
-toggleStroke.Thickness = 1.5
-
-toggleBtn.MouseButton1Click:Connect(function()
-	targetPage.Visible = not targetPage.Visible
+-- Loop duy trì Speed/Jump
+task.spawn(function()
+    while task.wait(0.1) do
+        pcall(function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                local hum = LocalPlayer.Character.Humanoid
+                hum.WalkSpeed = SpeedVal
+                hum.UseJumpPower = true
+                hum.JumpPower = JumpVal
+            end
+        end)
+    end
 end)
 
---====================================================
--- KHAI BÁO BIẾN HỆ THỐNG
---====================================================
-
-local selectedPlayer = nil
-local spectating = false
-local following = false
-local flyEnabled = false
-local camLockEnabled = false
-local espEnabled = false
-local aimbotEnabled = false
-local fixLagApplied = false
-
-local targetHighlight = nil
-local followConnection = nil
-local flyConnection = nil
-local camLockConnection = nil
-local aimbotConnection = nil
-local characterConnections = {}
-local espObjects = {}
-
-local autoTpButton = nil
-local spectateButton = nil
-local flyButton = nil
-local camLockButton = nil
-local espButton = nil
-local aimbotButton = nil
-local fixLagButton = nil
-
-local flySpeed = 50
-
---====================================================
--- HELPERS
---====================================================
-
-local function getRoot(player)
-	local character = player and player.Character
-	return character and character:FindFirstChild("HumanoidRootPart")
+-- Super Aimbot Logic
+local function GetClosestPlayer()
+    local target = nil
+    local maxDist = math.huge
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Head") and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+            local pos, onScreen = Camera:WorldToViewportPoint(v.Character.Head.Position)
+            if onScreen then
+                local dist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)).Magnitude
+                if dist < maxDist then
+                    maxDist = dist
+                    target = v
+                end
+            end
+        end
+    end
+    return target
 end
 
-local function getHumanoid(player)
-	local character = player and player.Character
-	return character and character:FindFirstChildOfClass("Humanoid")
-end
-
-local function clearHighlight()
-	if targetHighlight then
-		targetHighlight:Destroy()
-		targetHighlight = nil
-	end
-end
-
-local function stopFollow()
-	following = false
-	if followConnection then
-		followConnection:Disconnect()
-		followConnection = nil
-	end
-	if autoTpButton then
-		autoTpButton.Text = "FOLLOW: OFF"
-		autoTpButton.BackgroundColor3 = GRAY
-	end
-end
-
-local function stopSpectate()
-	spectating = false
-	local humanoid = getHumanoid(LP)
-	if humanoid and workspace.CurrentCamera then
-		workspace.CurrentCamera.CameraSubject = humanoid
-	end
-	if spectateButton then
-		spectateButton.Text = "SPECTATE: OFF"
-		spectateButton.BackgroundColor3 = GRAY
-	end
-end
-
-local function stopCamLock()
-	camLockEnabled = false
-	if camLockConnection then
-		camLockConnection:Disconnect()
-		camLockConnection = nil
-	end
-	if camLockButton then
-		camLockButton.Text = "CAM LOCK: OFF"
-		camLockButton.BackgroundColor3 = GRAY
-	end
-end
-
-local function stopAimbot()
-	aimbotEnabled = false
-	if aimbotConnection then
-		aimbotConnection:Disconnect()
-		aimbotConnection = nil
-	end
-	if aimbotButton then
-		aimbotButton.Text = "AIMBOT: OFF"
-		aimbotButton.BackgroundColor3 = GRAY
-	end
-end
-
-local function stopFly()
-	flyEnabled = false
-	if flyConnection then
-		flyConnection:Disconnect()
-		flyConnection = nil
-	end
-	
-	local myRoot = getRoot(LP)
-	if myRoot then
-		if myRoot:FindFirstChild("KD5_FlyBV") then myRoot.KD5_FlyBV:Destroy() end
-		if myRoot:FindFirstChild("KD5_FlyBG") then myRoot.KD5_FlyBG:Destroy() end
-	end
-	
-	local myHum = getHumanoid(LP)
-	if myHum then
-		myHum.PlatformStand = false
-	end
-
-	if flyButton then
-		flyButton.Text = "FLY: OFF"
-		flyButton.BackgroundColor3 = GRAY
-	end
-end
-
-local function clearTarget()
-	stopFollow()
-	stopSpectate()
-	stopCamLock()
-	stopAimbot()
-	clearHighlight()
-	selectedPlayer = nil
-end
-
---====================================================
--- HIGHLIGHT & ESP
---====================================================
-
-local function updateHighlight()
-	clearHighlight()
-
-	if not selectedPlayer or not selectedPlayer.Character then return end
-
-	targetHighlight = Instance.new("Highlight")
-	targetHighlight.Name = "KD5_TargetHighlight"
-	targetHighlight.FillColor = WHITE
-	targetHighlight.OutlineColor = WHITE
-	targetHighlight.FillTransparency = 0.85
-	targetHighlight.OutlineTransparency = 0
-	targetHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-	targetHighlight.Parent = selectedPlayer.Character
-end
-
-local function updateESP()
-	for plr, hl in pairs(espObjects) do
-		if hl then hl:Destroy() end
-	end
-	table.clear(espObjects)
-
-	if not espEnabled then return end
-
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LP and player.Character then
-			local hl = Instance.new("Highlight")
-			hl.Name = "KD5_ESP"
-			hl.FillColor = (player == selectedPlayer) and RED_ACCENT or GREEN_ACCENT
-			hl.OutlineColor = WHITE
-			hl.FillTransparency = 0.6
-			hl.OutlineTransparency = 0
-			hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-			hl.Parent = player.Character
-			
-			espObjects[player] = hl
-		end
-	end
-end
-
---====================================================
--- TITLE
---====================================================
-
-local title = Instance.new("TextLabel")
-title.Name = "Title"
-title.Size = UDim2.new(1, -10, 0, 24)
-title.Position = UDim2.fromOffset(10, 5)
-title.BackgroundTransparency = 1
-title.Text = "KD5 BI DA ĐEN"
-title.TextColor3 = WHITE
-title.TextSize = 13
-title.Font = Enum.Font.GothamBold
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = targetPage
-
---====================================================
--- PLAYER LIST
---====================================================
-
-local playerList = Instance.new("ScrollingFrame")
-playerList.Name = "PlayerList"
-playerList.Size = UDim2.new(1, -20, 0, 100)
-playerList.Position = UDim2.fromOffset(10, 32)
-playerList.BackgroundColor3 = DARK
-playerList.BorderSizePixel = 0
-playerList.ScrollBarThickness = 4
-playerList.CanvasSize = UDim2.fromOffset(0, 0)
-playerList.Parent = targetPage
-
-Instance.new("UICorner", playerList).CornerRadius = UDim.new(0, 8)
-
-local listLayout = Instance.new("UIListLayout")
-listLayout.Padding = UDim.new(0, 4)
-listLayout.Parent = playerList
-
-local refreshing = false
-
-local function refreshPlayers()
-	if refreshing then return end
-	refreshing = true
-
-	for _, child in ipairs(playerList:GetChildren()) do
-		if child:IsA("TextButton") then
-			child:Destroy()
-		end
-	end
-
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LP then
-			local button = Instance.new("TextButton")
-			button.Size = UDim2.new(1, -8, 0, 28)
-			button.BackgroundColor3 = (selectedPlayer == player) and ACTIVE_COLOR or GRAY
-			button.Text = player.DisplayName .. " (@" .. player.Name .. ")"
-			button.TextColor3 = WHITE
-			button.TextSize = 10
-			button.Font = Enum.Font.GothamBold
-			button.AutoButtonColor = false
-			button.Parent = playerList
-
-			Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
-
-			button.MouseButton1Click:Connect(function()
-				if selectedPlayer ~= player then
-					stopFollow()
-					stopSpectate()
-					stopCamLock()
-				end
-
-				selectedPlayer = player
-				refreshPlayers()
-				updateHighlight()
-				if espEnabled then updateESP() end
-			end)
-		end
-	end
-
-	task.defer(function()
-		if playerList.Parent and listLayout.Parent then
-			playerList.CanvasSize = UDim2.fromOffset(0, listLayout.AbsoluteContentSize.Y + 6)
-		end
-	end)
-
-	refreshing = false
-end
-
---====================================================
--- ROW 1: TELEPORT ME
---====================================================
-
-local teleportButton = Instance.new("TextButton")
-teleportButton.Name = "TeleportButton"
-teleportButton.Size = UDim2.new(1, -20, 0, 24)
-teleportButton.Position = UDim2.fromOffset(10, 136)
-teleportButton.BackgroundColor3 = GRAY
-teleportButton.Text = "TELEPORT ME"
-teleportButton.TextColor3 = WHITE
-teleportButton.TextSize = 10
-teleportButton.Font = Enum.Font.GothamBold
-teleportButton.AutoButtonColor = false
-teleportButton.Parent = targetPage
-
-Instance.new("UICorner", teleportButton).CornerRadius = UDim.new(0, 6)
-
-teleportButton.MouseButton1Click:Connect(function()
-	if not selectedPlayer then return end
-
-	local myRoot = getRoot(LP)
-	local targetRoot = getRoot(selectedPlayer)
-
-	if not myRoot or not targetRoot then return end
-
-	local distance = (myRoot.Position - targetRoot.Position).Magnitude
-	local duration = math.clamp(distance / 100, 0.15, 3)
-
-	local tween = TweenService:Create(
-		myRoot,
-		TweenInfo.new(duration, Enum.EasingStyle.Linear),
-		{ CFrame = targetRoot.CFrame * CFrame.new(0, 0, 4) }
-	)
-
-	tween:Play()
+RunService.RenderStepped:Connect(function()
+    if AimbotEnabled then
+        local target = GetClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("Head") then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
+        end
+    end
 end)
 
---====================================================
--- ROW 2: SPECTATE & FOLLOW
---====================================================
+-- TAB 1: MOVEMENT & AIMBOT (Tông màu Đỏ)
+local MainTab = Window:MakeTab({Name = "Main / Movement", Icon = "rbxassetid://4483345998"})
 
-spectateButton = Instance.new("TextButton")
-spectateButton.Name = "SpectateButton"
-spectateButton.Size = UDim2.new(0.5, -13, 0, 24)
-spectateButton.Position = UDim2.fromOffset(10, 164)
-spectateButton.BackgroundColor3 = GRAY
-spectateButton.Text = "SPECTATE: OFF"
-spectateButton.TextColor3 = WHITE
-spectateButton.TextSize = 10
-spectateButton.Font = Enum.Font.GothamBold
-spectateButton.AutoButtonColor = false
-spectateButton.Parent = targetPage
+MainTab:AddSlider({
+    Name = "Speed Boost", Min = 16, Max = 500, Default = 16, 
+    Color = Color3.fromRGB(255, 0, 0), -- Đỏ tươi
+    Increment = 1, ValueName = "Speed",
+    Callback = function(v) SpeedVal = v end
+})
 
-Instance.new("UICorner", spectateButton).CornerRadius = UDim.new(0, 6)
+MainTab:AddSlider({
+    Name = "Jump Boost", Min = 50, Max = 500, Default = 50, 
+    Color = Color3.fromRGB(180, 0, 0), -- Đỏ sẫm
+    Increment = 1, ValueName = "Jump",
+    Callback = function(v) JumpVal = v end
+})
 
-spectateButton.MouseButton1Click:Connect(function()
-	if not selectedPlayer then return end
+MainTab:AddToggle({
+    Name = "Super Aimbot", Default = false,
+    Callback = function(v) AimbotEnabled = v end
+})
 
-	if spectating then
-		stopSpectate()
-		return
-	end
+-- TAB 2: UTILITIES
+local UtilTab = Window:MakeTab({Name = "Admin / Utility", Icon = "rbxassetid://4483345998"})
 
-	local humanoid = getHumanoid(selectedPlayer)
-	if not humanoid then return end
+UtilTab:AddToggle({
+    Name = "Fly (Bay theo Camera)", Default = false,
+    Callback = function(v)
+        Flying = v
+        local char = LocalPlayer.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+        local hrp = char.HumanoidRootPart
+        
+        if Flying then
+            local bv = Instance.new("BodyVelocity")
+            bv.Name = "FlyVelocity"
+            bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+            bv.Parent = hrp
+            
+            task.spawn(function()
+                while Flying and hrp:FindFirstChild("FlyVelocity") do
+                    bv.Velocity = Camera.CFrame.LookVector * FlySpeed
+                    task.wait()
+                end
+                bv:Destroy()
+            end)
+        end
+    end
+})
 
-	spectating = true
-	workspace.CurrentCamera.CameraSubject = humanoid
-	spectateButton.Text = "SPECTATE: ON"
-	spectateButton.BackgroundColor3 = ACTIVE_COLOR
-end)
-
-autoTpButton = Instance.new("TextButton")
-autoTpButton.Name = "FollowButton"
-autoTpButton.Size = UDim2.new(0.5, -13, 0, 24)
-autoTpButton.Position = UDim2.new(0.5, 3, 0, 164)
-autoTpButton.BackgroundColor3 = GRAY
-autoTpButton.Text = "FOLLOW: OFF"
-autoTpButton.TextColor3 = WHITE
-autoTpButton.TextSize = 10
-autoTpButton.Font = Enum.Font.GothamBold
-autoTpButton.AutoButtonColor = false
-autoTpButton.Parent = targetPage
-
-Instance.new("UICorner", autoTpButton).CornerRadius = UDim.new(0, 6)
-
-autoTpButton.MouseButton1Click:Connect(function()
-	if not selectedPlayer then return end
-
-	if following then
-		stopFollow()
-		return
-	end
-
-	following = true
-	autoTpButton.Text = "FOLLOW: ON"
-	autoTpButton.BackgroundColor3 = ACTIVE_COLOR
-
-	followConnection = RunService.Heartbeat:Connect(function()
-		if not following or not selectedPlayer then return end
-
-		local myRoot = getRoot(LP)
-		local targetRoot = getRoot(selectedPlayer)
-
-		if not myRoot or not targetRoot then return end
-
-		local position = targetRoot.Position - targetRoot.CFrame.LookVector * 5
-		myRoot.CFrame = CFrame.lookAt(position, targetRoot.Position)
-	end)
-end)
-
---====================================================
--- ROW 3: CAM LOCK & FLY
---====================================================
-
-camLockButton = Instance.new("TextButton")
-camLockButton.Name = "CamLockButton"
-camLockButton.Size = UDim2.new(0.5, -13, 0, 24)
-camLockButton.Position = UDim2.fromOffset(10, 192)
-camLockButton.BackgroundColor3 = GRAY
-camLockButton.Text = "CAM LOCK: OFF"
-camLockButton.TextColor3 = WHITE
-camLockButton.TextSize = 10
-camLockButton.Font = Enum.Font.GothamBold
-camLockButton.AutoButtonColor = false
-camLockButton.Parent = targetPage
-
-Instance.new("UICorner", camLockButton).CornerRadius = UDim.new(0, 6)
-
-camLockButton.MouseButton1Click:Connect(function()
-	if not selectedPlayer then return end
-
-	if camLockEnabled then
-		stopCamLock()
-		return
-	end
-
-	camLockEnabled = true
-	camLockButton.Text = "CAM LOCK: ON"
-	camLockButton.BackgroundColor3 = ACTIVE_COLOR
-
-	camLockConnection = RunService.RenderStepped:Connect(function()
-		if not camLockEnabled or not selectedPlayer or not selectedPlayer.Character then
-			stopCamLock()
-			return
-		end
-
-		local head = selectedPlayer.Character:FindFirstChild("Head")
-		if head and workspace.CurrentCamera then
-			workspace.CurrentCamera.CFrame = CFrame.lookAt(workspace.CurrentCamera.CFrame.Position, head.Position)
-		end
-	end)
-end)
-
-flyButton = Instance.new("TextButton")
-flyButton.Name = "FlyButton"
-flyButton.Size = UDim2.new(0.5, -13, 0, 24)
-flyButton.Position = UDim2.new(0.5, 3, 0, 192)
-flyButton.BackgroundColor3 = GRAY
-flyButton.Text = "FLY: OFF"
-flyButton.TextColor3 = WHITE
-flyButton.TextSize = 10
-flyButton.Font = Enum.Font.GothamBold
-flyButton.AutoButtonColor = false
-flyButton.Parent = targetPage
-
-Instance.new("UICorner", flyButton).CornerRadius = UDim.new(0, 6)
-
-flyButton.MouseButton1Click:Connect(function()
-	if flyEnabled then
-		stopFly()
-		return
-	end
-
-	local myRoot = getRoot(LP)
-	local myHum = getHumanoid(LP)
-	if not myRoot or not myHum then return end
-
-	flyEnabled = true
-	flyButton.Text = "FLY: ON"
-	flyButton.BackgroundColor3 = ACTIVE_COLOR
-
-	myHum.PlatformStand = true
-
-	local bv = Instance.new("BodyVelocity")
-	bv.Name = "KD5_FlyBV"
-	bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-	bv.Velocity = Vector3.zero
-	bv.Parent = myRoot
-
-	local bg = Instance.new("BodyGyro")
-	bg.Name = "KD5_FlyBG"
-	bg.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-	bg.P = 9e4
-	bg.CFrame = myRoot.CFrame
-	bg.Parent = myRoot
-
-	flyConnection = RunService.RenderStepped:Connect(function()
-		if not flyEnabled or not myRoot or not myRoot.Parent then
-			stopFly()
-			return
-		end
-
-		local camCF = workspace.CurrentCamera.CFrame
-		local moveDir = Vector3.zero
-
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camCF.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camCF.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camCF.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camCF.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
-		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0, 1, 0) end
-
-		bg.CFrame = camCF
-		bv.Velocity = moveDir * flySpeed
-	end)
-end)
-
---====================================================
--- ROW 4: ESP ALL PLAYERS
---====================================================
-
-espButton = Instance.new("TextButton")
-espButton.Name = "EspButton"
-espButton.Size = UDim2.new(1, -20, 0, 24)
-espButton.Position = UDim2.fromOffset(10, 220)
-espButton.BackgroundColor3 = GRAY
-espButton.Text = "ESP PLAYER: OFF"
-espButton.TextColor3 = WHITE
-espButton.TextSize = 10
-espButton.Font = Enum.Font.GothamBold
-espButton.AutoButtonColor = false
-espButton.Parent = targetPage
-
-Instance.new("UICorner", espButton).CornerRadius = UDim.new(0, 6)
-
-espButton.MouseButton1Click:Connect(function()
-	espEnabled = not espEnabled
-	if espEnabled then
-		espButton.Text = "ESP PLAYER: ON"
-		espButton.BackgroundColor3 = ACTIVE_COLOR
-	else
-		espButton.Text = "ESP PLAYER: OFF"
-		espButton.BackgroundColor3 = GRAY
-	end
-	updateESP()
-end)
-
---====================================================
--- ROW 5: AIMBOT & FIX LAG
---====================================================
-
-aimbotButton = Instance.new("TextButton")
-aimbotButton.Name = "AimbotButton"
-aimbotButton.Size = UDim2.new(0.5, -13, 0, 24)
-aimbotButton.Position = UDim2.fromOffset(10, 248)
-aimbotButton.BackgroundColor3 = GRAY
-aimbotButton.Text = "AIMBOT: OFF"
-aimbotButton.TextColor3 = WHITE
-aimbotButton.TextSize = 10
-aimbotButton.Font = Enum.Font.GothamBold
-aimbotButton.AutoButtonColor = false
-aimbotButton.Parent = targetPage
-
-Instance.new("UICorner", aimbotButton).CornerRadius = UDim.new(0, 6)
-
-aimbotButton.MouseButton1Click:Connect(function()
-	if aimbotEnabled then
-		stopAimbot()
-		return
-	end
-
-	aimbotEnabled = true
-	aimbotButton.Text = "AIMBOT: ON"
-	aimbotButton.BackgroundColor3 = ACTIVE_COLOR
-
-	aimbotConnection = RunService.RenderStepped:Connect(function()
-		if not aimbotEnabled then
-			stopAimbot()
-			return
-		end
-
-		local targetPart = nil
-		if selectedPlayer and selectedPlayer.Character then
-			targetPart = selectedPlayer.Character:FindFirstChild("Head") or selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
-		else
-			-- Tự động bắt mục tiêu gần nhất nếu chưa chọn ai
-			local closestDist = math.huge
-			local myRoot = getRoot(LP)
-			if myRoot then
-				for _, p in ipairs(Players:GetPlayers()) do
-					if p ~= LP and p.Character then
-						local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-						if hrp then
-							local dist = (hrp.Position - myRoot.Position).Magnitude
-							if dist < closestDist then
-								closestDist = dist
-								targetPart = p.Character:FindFirstChild("Head") or hrp
-							end
-						end
-					end
-				end
-			end
-		end
-
-		if targetPart and workspace.CurrentCamera then
-			workspace.CurrentCamera.CFrame = CFrame.lookAt(workspace.CurrentCamera.CFrame.Position, targetPart.Position)
-		end
-	end)
-end)
-
-fixLagButton = Instance.new("TextButton")
-fixLagButton.Name = "FixLagButton"
-fixLagButton.Size = UDim2.new(0.5, -13, 0, 24)
-fixLagButton.Position = UDim2.new(0.5, 3, 0, 248)
-fixLagButton.BackgroundColor3 = GRAY
-fixLagButton.Text = "FIX LAG: OFF"
-fixLagButton.TextColor3 = WHITE
-fixLagButton.TextSize = 10
-fixLagButton.Font = Enum.Font.GothamBold
-fixLagButton.AutoButtonColor = false
-fixLagButton.Parent = targetPage
-
-Instance.new("UICorner", fixLagButton).CornerRadius = UDim.new(0, 6)
-
-fixLagButton.MouseButton1Click:Connect(function()
-	fixLagApplied = not fixLagApplied
-	if fixLagApplied then
-		fixLagButton.Text = "FIX LAG: ON"
-		fixLagButton.BackgroundColor3 = ACTIVE_COLOR
-		
-		-- Tối ưu hóa đồ họa giảm lag
-		pcall(function()
-			settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-		end)
-		pcall(function()
-			game:GetService("Lighting").GlobalShadows = false
-			game:GetService("Lighting").FogEnd = 9e9
-		end)
-		
-		for _, v in ipairs(workspace:GetDescendants()) do
-			if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
-				v.Enabled = false
-			elseif v:IsA("BasePart") then
-				v.Material = Enum.Material.SmoothPlastic
-				v.CastShadow = false
-			end
-		end
-	else
-		fixLagButton.Text = "FIX LAG: OFF"
-		fixLagButton.BackgroundColor3 = GRAY
-	end
-end)
-
---====================================================
--- CHARACTER & PLAYER EVENTS
---====================================================
-
-local function watchPlayer(player)
-	if player == LP then return end
-
-	if characterConnections[player] then
-		characterConnections[player]:Disconnect()
-	end
-
-	characterConnections[player] = player.CharacterAdded:Connect(function()
-		task.wait(0.3)
-		if player == selectedPlayer then
-			updateHighlight()
-			if spectating then stopSpectate() end
-			if camLockEnabled then stopCamLock() end
-		end
-		if espEnabled then updateESP() end
-	end)
+local playerList = {}
+local function updatePlayerList()
+    playerList = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then table.insert(playerList, p.Name) end
+    end
 end
+updatePlayerList()
 
-for _, player in ipairs(Players:GetPlayers()) do
-	watchPlayer(player)
-end
+local PlayerDropdown = UtilTab:AddDropdown({
+    Name = "Chọn Người Chơi", Options = playerList,
+    Callback = function(v) TargetPlayerName = v end
+})
 
-Players.PlayerAdded:Connect(function(player)
-	watchPlayer(player)
-	task.defer(function()
-		refreshPlayers()
-		if espEnabled then updateESP() end
-	end)
-end)
+UtilTab:AddButton({
+    Name = "Làm mới danh sách Player",
+    Callback = function()
+        updatePlayerList()
+        PlayerDropdown:Refresh(playerList, true)
+    end
+})
 
-Players.PlayerRemoving:Connect(function(player)
-	if characterConnections[player] then
-		characterConnections[player]:Disconnect()
-		characterConnections[player] = nil
-	end
+UtilTab:AddButton({
+    Name = "Teleport tới Player",
+    Callback = function()
+        local target = Players:FindFirstChild(TargetPlayerName)
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+        end
+    end
+})
 
-	if player == selectedPlayer then
-		clearTarget()
-	end
+UtilTab:AddButton({
+    Name = "Spectate Player",
+    Callback = function()
+        local target = Players:FindFirstChild(TargetPlayerName)
+        if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = target.Character.Humanoid
+        end
+    end
+})
 
-	task.defer(function()
-		refreshPlayers()
-		if espEnabled then updateESP() end
-	end)
-end)
+UtilTab:AddButton({
+    Name = "Tắt Spectate",
+    Callback = function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = LocalPlayer.Character.Humanoid
+        end
+    end
+})
 
-LP.CharacterAdded:Connect(function()
-	task.wait(0.3)
-	if spectating then stopSpectate() end
-	if flyEnabled then stopFly() end
-	if selectedPlayer then updateHighlight() end
-	if espEnabled then updateESP() end
-end)
+UtilTab:AddButton({
+    Name = "Fix Lag (Tối ưu FPS)",
+    Callback = function()
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        for _, v in pairs(game:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.Material = Enum.Material.SmoothPlastic
+            elseif v:IsA("Decal") or v:IsA("Texture") then
+                v:Destroy()
+            end
+        end
+    end
+})
 
---====================================================
--- INIT
---====================================================
-
-refreshPlayers()
+OrionLib:Init()
