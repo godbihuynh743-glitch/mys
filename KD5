@@ -1,7 +1,21 @@
--- [[ KD5 CLIENT HUB - RED NEON EDITION (AUTO V3/V4 & BOUNTY SAVER) ]] --
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/InterfaceManager.lua"))()
+-- [[ KD5 CLIENT HUB - RED NEON EDITION (FIXED & OPTIMIZED) ]] --
+
+local successFluent, Fluent = pcall(function()
+    return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+end)
+
+if not successFluent or not Fluent then
+    warn("Không thể tải giao diện Fluent UI! Hãy kiểm tra lại kết nối mạng hoặc Executor.")
+    return
+end
+
+local successSave, SaveManager = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/SaveManager.lua"))()
+end)
+
+local successInterface, InterfaceManager = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/InterfaceManager.lua"))()
+end)
 
 -- Services
 local Players = game:GetService("Players")
@@ -51,12 +65,17 @@ local AimSettings = {
     FOVRainbow = false
 }
 
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Thickness = 1.5
-FOVCircle.NumSides = 60
-FOVCircle.Filled = false
-FOVCircle.Transparency = 1
-FOVCircle.Visible = false
+local FOVCircle = nil
+pcall(function()
+    if Drawing then
+        FOVCircle = Drawing.new("Circle")
+        FOVCircle.Thickness = 1.5
+        FOVCircle.NumSides = 60
+        FOVCircle.Filled = false
+        FOVCircle.Transparency = 1
+        FOVCircle.Visible = false
+    end
+end)
 
 local IsAiming = false
 
@@ -181,14 +200,16 @@ end
 RunService.RenderStepped:Connect(function()
     pcall(function()
         local mousePos = UserInputService:GetMouseLocation()
-        FOVCircle.Position = mousePos
-        FOVCircle.Radius = AimSettings.FOVRadius
-        FOVCircle.Visible = AimSettings.FOVVisible and AimSettings.Enabled
-        
-        if AimSettings.FOVRainbow then
-            FOVCircle.Color = Color3.fromHSV(tick() % 3 / 3, 1, 1)
-        else
-            FOVCircle.Color = AimSettings.FOVColor
+        if FOVCircle then
+            FOVCircle.Position = mousePos
+            FOVCircle.Radius = AimSettings.FOVRadius
+            FOVCircle.Visible = AimSettings.FOVVisible and AimSettings.Enabled
+            
+            if AimSettings.FOVRainbow then
+                FOVCircle.Color = Color3.fromHSV(tick() % 3 / 3, 1, 1)
+            else
+                FOVCircle.Color = AimSettings.FOVColor
+            end
         end
 
         if AimSettings.Enabled and IsAiming then
@@ -303,7 +324,6 @@ task.spawn(function()
     end
 end)
 
--- Auto Race V3 & V4 Loop
 task.spawn(function()
     while task.wait(0.5) do
         pcall(function()
@@ -548,15 +568,17 @@ Tabs.Utility:AddButton({
 })
 
 -- Managers Setup
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
-SaveManager:IgnoreThemeSettings()
-SaveManager:BuildConfigSection(Tabs.Settings)
-InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+if SaveManager and InterfaceManager then
+    SaveManager:SetLibrary(Fluent)
+    InterfaceManager:SetLibrary(Fluent)
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:BuildConfigSection(Tabs.Settings)
+    InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+end
 
 Window:SelectTab(1)
 Fluent:Notify({
     Title = "KD5 Client Hub",
-    Content = "Đã thêm tính năng Tự động bật V3 & V4 thành công!",
+    Content = "Đã tải thành công phiên bản sửa lỗi ổn định!",
     Duration = 5
 })
