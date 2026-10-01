@@ -1,11 +1,20 @@
-local Q = loadstring(game:HttpGet("https://raw.githubusercontent.com/flazhy/QuantumOnyx/refs/heads/main/QuantumOnyx.lua"))()
-local Win = Q:MakeWindow({Name = "Quantum Universal", SubTitle = "All-In-One Hub"})
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "KD5 Universal Hub",
+   LoadingTitle = "KD5 Hub Loading...",
+   LoadingSubtitle = "Standalone Script",
+   ConfigurationSaving = { Enabled = false }
+})
+
+local CombatTab = Window:CreateTab("Combat")
+local MovementTab = Window:CreateTab("Movement")
+local VisualsTab = Window:CreateTab("Visuals")
 
 local P, RS, UIS = game:GetService("Players"), game:GetService("RunService"), game:GetService("UserInputService")
 local LP = P.LocalPlayer
 local Cam = workspace.CurrentCamera
 
--- Cấu hình trạng thái tính năng
 local Config = {
     Aimbot = false,
     HoldRMB = true,
@@ -18,39 +27,69 @@ local Config = {
     ESP = false
 }
 
--- Khởi tạo Tabs
-local CombatTab = Win:MakeTab({Name = "Combat"})
-local MovementTab = Win:MakeTab({Name = "Movement"})
-local VisualsTab = Win:MakeTab({Name = "Visuals"})
+-- COMBAT TAB
+CombatTab:CreateToggle({
+    Name = "Enable Aimbot",
+    CurrentValue = false,
+    Callback = function(Value) Config.Aimbot = Value end,
+})
 
--- TAB COMBAT
-CombatTab:AddToggle({Name = "Enable Aimbot", Callback = function(v) Config.Aimbot = v end})
-CombatTab:AddToggle({Name = "Hold Right Click to Aim", Default = true, Callback = function(v) Config.HoldRMB = v end})
-CombatTab:AddDropdown({
+CombatTab:CreateToggle({
+    Name = "Hold Right Click (Giữ chuột phải để Aim)",
+    CurrentValue = true,
+    Callback = function(Value) Config.HoldRMB = Value end,
+})
+
+CombatTab:CreateDropdown({
     Name = "Aim Part",
     Options = {"Head", "HumanoidRootPart"},
-    Callback = function(v) Config.AimPart = v end
+    CurrentOption = {"Head"},
+    Callback = function(Option) Config.AimPart = Option[1] end,
 })
 
--- TAB MOVEMENT (Thêm Fly & Infinite Jump)
-MovementTab:AddToggle({Name = "Fly (Bay)", Callback = function(v) Config.Fly = v end})
-MovementTab:AddSlider({
+-- MOVEMENT TAB
+MovementTab:CreateToggle({
+    Name = "Fly (Bay)",
+    CurrentValue = false,
+    Callback = function(Value) Config.Fly = Value end,
+})
+
+MovementTab:CreateSlider({
     Name = "Fly Speed",
-    Min = 10, Max = 300, Default = 50,
-    Callback = function(v) Config.FlySpeed = v end
+    Range = {10, 300},
+    Increment = 5,
+    CurrentValue = 50,
+    Callback = function(Value) Config.FlySpeed = Value end,
 })
-MovementTab:AddToggle({Name = "Infinite Jump (Nhảy vô hạn)", Callback = function(v) Config.InfJump = v end})
-MovementTab:AddToggle({Name = "Noclip", Callback = function(v) Config.Noclip = v end})
-MovementTab:AddSlider({
+
+MovementTab:CreateToggle({
+    Name = "Infinite Jump (Nhảy vô hạn)",
+    CurrentValue = false,
+    Callback = function(Value) Config.InfJump = Value end,
+})
+
+MovementTab:CreateToggle({
+    Name = "Noclip (Xuyên tường)",
+    CurrentValue = false,
+    Callback = function(Value) Config.Noclip = Value end,
+})
+
+MovementTab:CreateSlider({
     Name = "WalkSpeed",
-    Min = 16, Max = 250, Default = 16,
-    Callback = function(v) Config.Speed = v end
+    Range = {16, 250},
+    Increment = 1,
+    CurrentValue = 16,
+    Callback = function(Value) Config.Speed = Value end,
 })
 
--- TAB VISUALS
-VisualsTab:AddToggle({Name = "Player ESP", Callback = function(v) Config.ESP = v end})
+-- VISUALS TAB
+VisualsTab:CreateToggle({
+    Name = "Player ESP Highlight",
+    CurrentValue = false,
+    Callback = function(Value) Config.ESP = Value end,
+})
 
--- Logic Infinite Jump (Bắt sự kiện bấm nút Nhảy)
+-- Logic Infinite Jump
 UIS.JumpRequest:Connect(function()
     if Config.InfJump and LP.Character then
         local hum = LP.Character:FindFirstChildOfClass("Humanoid")
@@ -79,9 +118,9 @@ local function getClosestPlayer()
     return target
 end
 
--- Luồng xử lý RenderStepped chính
+-- Vòng lặp xử lý chính
 RS.RenderStepped:Connect(function()
-    -- 1. Logic Aimbot (Giữ chuột phải)
+    -- 1. Aimbot (Giữ chuột phải)
     local isRMBHeld = UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
     if Config.Aimbot and (not Config.HoldRMB or isRMBHeld) then
         local target = getClosestPlayer()
@@ -90,21 +129,19 @@ RS.RenderStepped:Connect(function()
         end
     end
 
-    -- 2. Logic Character (WalkSpeed, Noclip, Fly)
+    -- 2. Character Features (WalkSpeed, Noclip, Fly)
     if LP.Character then
         local root = LP.Character:FindFirstChild("HumanoidRootPart")
         local hum = LP.Character:FindFirstChildOfClass("Humanoid")
 
         if hum then hum.WalkSpeed = Config.Speed end
 
-        -- Noclip
         if Config.Noclip then
             for _, part in ipairs(LP.Character:GetDescendants()) do
                 if part:IsA("BasePart") then part.CanCollide = false end
             end
         end
 
-        -- Fly Logic (Dùng các phím WASD + Space để lên / LeftShift để xuống)
         if Config.Fly and root and hum then
             hum.PlatformStand = true
             local moveDir = Vector3.zero
@@ -121,14 +158,14 @@ RS.RenderStepped:Connect(function()
         end
     end
 
-    -- 3. Logic Player ESP
+    -- 3. Player ESP
     for _, p in ipairs(P:GetPlayers()) do
         if p ~= LP and p.Character then
-            local hl = p.Character:FindFirstChild("QuantumESP")
+            local hl = p.Character:FindFirstChild("RayfieldESP")
             if Config.ESP then
                 if not hl then
                     hl = Instance.new("Highlight")
-                    hl.Name = "QuantumESP"
+                    hl.Name = "RayfieldESP"
                     hl.FillTransparency = 0.5
                     hl.OutlineColor = Color3.fromRGB(255, 0, 0)
                     hl.Parent = p.Character
